@@ -308,6 +308,9 @@
       .map-link:hover {
         background: #f0fdf4;
       }
+      .mode-picker.city-picker {
+        margin-top: 12px;
+      }
     </style>
   </head>
   <body>
@@ -331,20 +334,33 @@
         <img id="preview" alt="selected route table" />
       </div>
 
-      <div class="mode-picker" role="radiogroup" aria-label="Transport mode">
-        <label>
-          <input type="radio" name="mode" value="car" checked />
-          <span>Car</span>
-        </label>
-        <label>
-          <input type="radio" name="mode" value="bike" />
-          <span>Bike</span>
-        </label>
-        <label>
-          <input type="radio" name="mode" value="public" />
-          <span>Public</span>
-        </label>
-      </div>
+        <div class="mode-picker" role="radiogroup" aria-label="Transport mode">
+          <label>
+            <input type="radio" name="mode" value="car" checked />
+            <span>Car</span>
+          </label>
+          <label>
+            <input type="radio" name="mode" value="bike" />
+            <span>Bike</span>
+          </label>
+          <label>
+            <input type="radio" name="mode" value="public" />
+            <span>Public</span>
+          </label>
+        </div>
+
+        <div class="mode-picker city-picker">
+          <select id="cityInput" style="width: 100%; border: none; background: transparent; padding: 10px; font-size: 14px; font-weight: 500; color: #4b5563; cursor: pointer; outline: none;">
+            <option value="Hyderabad">Hyderabad</option>
+            <option value="Delhi">Delhi</option>
+            <option value="Delhi NCR">Delhi NCR</option>
+            <option value="Mumbai">Mumbai</option>
+            <option value="Bangalore">Bangalore</option>
+            <option value="Chennai">Chennai</option>
+            <option value="Kolkata">Kolkata</option>
+            <option value="Pune">Pune</option>
+          </select>
+        </div>
 
       <button id="extractBtn" class="btn btn-primary" disabled>
         Extract &amp; Get Distances
@@ -401,6 +417,7 @@
       const resultsEl = document.getElementById("results");
       const resultsBody = document.getElementById("resultsBody");
       const downloadBtn = document.getElementById("downloadBtn");
+      const cityInput = document.getElementById("cityInput");
 
       let selectedFile = null;
       let lastRoutes = [];
@@ -462,10 +479,11 @@
           }
           const mode =
             document.querySelector('input[name="mode"]:checked')?.value || "car";
+          const city = cityInput.value || "Hyderabad";
           const res = await fetch(WORKER_URL.replace(/\/$/, "") + "/extract", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: base64, mimeType: "image/jpeg", mode }),
+            body: JSON.stringify({ image: base64, mimeType: "image/jpeg", mode, city }),
           });
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) {
@@ -517,6 +535,7 @@
         resultsBody.innerHTML = "";
         const selectedMode =
           document.querySelector('input[name="mode"]:checked')?.value || "car";
+        const selectedCity = cityInput.value || "Hyderabad";
         let fallbackCount = 0;
         for (const r of routes) {
           const fellBack = r.mode_used && r.mode_used !== selectedMode;
@@ -525,7 +544,7 @@
           const alts = Array.isArray(r.alternatives) ? r.alternatives : [];
           const hasAlts = alts.length > 0;
 
-          const mapUrl = buildGoogleMapsUrl(r.from, r.to, selectedMode);
+          const mapUrl = buildGoogleMapsUrl(r.from, r.to, selectedMode, selectedCity);
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>${hasAlts ? `<button class="toggle-btn" data-sr="${r.sr}" aria-expanded="false" title="Show all routes">+</button>` : ""}</td>
@@ -606,10 +625,10 @@
        * Build a Google Maps directions URL for a FROM → TO route.
        * Travel mode codes in Google Maps URL: !3e0=driving, !3e9=two-wheeler, !3e3=transit, !3e2=walking
        */
-      function buildGoogleMapsUrl(from, to, mode) {
+      function buildGoogleMapsUrl(from, to, mode, city) {
         const modeCode = { car: "0", bike: "9", public: "3", walk: "2" }[mode] || "0";
-        const origin = encodeURIComponent(from + ", Hyderabad");
-        const dest = encodeURIComponent(to + ", Hyderabad");
+        const origin = encodeURIComponent(from + ", " + city);
+        const dest = encodeURIComponent(to + ", " + city);
         return `https://www.google.com/maps/dir/${origin}/${dest}/data=!4m2!4m1!3e${modeCode}`;
       }
 
