@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Route Distance Extractor</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+        background: #ffffff;
+        color: #1a1a1a;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+      header {
+        padding: 20px 16px;
+        border-bottom: 1px solid #eee;
+        text-align: center;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      main {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 20px 16px 60px;
+      }
+      .drop-zone {
+        display: block;
+        width: 100%;
+        border: 2px dashed #cfcfcf;
+        border-radius: 12px;
+        padding: 40px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+        background: #fafafa;
+      }
+      .drop-zone.dragover {
+        border-color: #16a34a;
+        background: #f0fdf4;
+      }
+      .drop-zone p {
+        margin: 6px 0;
+        color: #555;
+        font-size: 15px;
+      }
+      .drop-zone .hint {
+        color: #888;
+        font-size: 13px;
+      }
+      #fileInput {
+        display: none;
+      }
+      .preview-wrap {
+        margin-top: 20px;
+        text-align: center;
+      }
+      #preview {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 8px;
+        border: 1px solid #eee;
+      }
+      .btn {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 14px 18px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 16px;
+      }
+      .btn-primary {
+        background: #16a34a;
+        color: #fff;
+      }
+      .btn-primary:disabled {
+        background: #9cd6b1;
+        cursor: not-allowed;
+      }
+      .btn-secondary {
+        background: #111827;
+        color: #fff;
+      }
+      .steps {
+        margin-top: 20px;
+        padding: 14px 16px;
+        background: #f7f7f8;
+        border-radius: 10px;
+        font-size: 14px;
+      }
+      .step {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 4px 0;
+        color: #6b7280;
+      }
+      .step.active {
+        color: #111;
+        font-weight: 600;
+      }
+      .step.done {
+        color: #16a34a;
+      }
+      .step .bullet {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #e5e7eb;
+        color: #fff;
+        text-align: center;
+        line-height: 18px;
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+      .step.active .bullet {
+        background: #111827;
+      }
+      .step.done .bullet {
+        background: #16a34a;
+      }
+      .error {
+        margin-top: 16px;
+        padding: 12px 14px;
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .results {
+        margin-top: 24px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 8px;
+        border-bottom: 1px solid #eee;
+      }
+      th {
+        background: #f9fafb;
+        font-weight: 600;
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .muted {
+        color: #9ca3af;
+      }
+      .fallback-mark {
+        color: #b45309;
+        font-weight: 700;
+        margin-left: 3px;
+      }
+      .fallback-legend {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .toggle-btn {
+        background: none;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        width: 22px;
+        height: 22px;
+        cursor: pointer;
+        font-size: 11px;
+        color: #4b5563;
+        padding: 0;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .toggle-btn:hover {
+        background: #f3f4f6;
+      }
+      .alts-row td {
+        background: #fafafa;
+        padding: 0;
+        border-bottom: 1px solid #eee;
+      }
+      .alts-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .alts-table th,
+      .alts-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #f0f0f0;
+      }
+      .alts-table th {
+        background: #f3f4f6;
+        font-weight: 600;
+        font-size: 12px;
+        color: #4b5563;
+      }
+      .alts-table tr:last-child td {
+        border-bottom: 0;
+      }
+      .alts-table .picked {
+        background: #f0fdf4;
+        font-weight: 600;
+      }
+      .alts-table .filtered {
+        color: #9ca3af;
+        text-decoration: line-through;
+      }
+      .alts-table .badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 6px;
+        vertical-align: 1px;
+      }
+      .badge-picked {
+        background: #16a34a;
+        color: #fff;
+      }
+      .badge-filtered {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .mode-picker {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+        background: #f3f4f6;
+        padding: 4px;
+        border-radius: 10px;
+      }
+      .mode-picker label {
+        flex: 1;
+        text-align: center;
+        padding: 10px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4b5563;
+        transition: background 0.15s, color 0.15s;
+      }
+      .mode-picker input[type="radio"] {
+        display: none;
+      }
+      .mode-picker input[type="radio"]:checked + span {
+        background: #fff;
+        color: #111827;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+      .mode-picker label span {
+        display: block;
+        padding: 10px 8px;
+        margin: -10px -8px;
+        border-radius: 8px;
+      }
+      @media (max-width: 480px) {
+        header h1 {
+          font-size: 18px;
+        }
+        th,
+        td {
+          padding: 8px 6px;
+          font-size: 13px;
+        }
+      }
+      .map-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 16px;
+        transition: background 0.15s;
+      }
+      .map-link:hover {
+        background: #f0fdf4;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Route Distance Extractor</h1>
+    </header>
+
+    <main>
+      <label class="drop-zone" id="dropZone" for="fileInput">
+        <p><strong>Drop a route table photo here</strong></p>
+        <p class="hint">or tap to choose / take a photo</p>
+        <input
+          id="fileInput"
+          type="file"
+          accept="image/*"
+          capture="environment"
+        />
+      </label>
+
+      <div class="preview-wrap" id="previewWrap" hidden>
+        <img id="preview" alt="selected route table" />
+      </div>
+
+      <div class="mode-picker" role="radiogroup" aria-label="Transport mode">
+        <label>
+          <input type="radio" name="mode" value="car" checked />
+          <span>Car</span>
+        </label>
+        <label>
+          <input type="radio" name="mode" value="bike" />
+          <span>Bike</span>
+        </label>
+        <label>
+          <input type="radio" name="mode" value="public" />
+          <span>Public</span>
+        </label>
+      </div>
+
+      <button id="extractBtn" class="btn btn-primary" disabled>
+        Extract &amp; Get Distances
+      </button>
+
+      <div id="steps" class="steps" hidden>
+        <div class="step" data-step="1">
+          <span class="bullet">1</span><span>Uploading image...</span>
+        </div>
+        <div class="step" data-step="2">
+          <span class="bullet">2</span><span>Extracting routes via OCR...</span>
+        </div>
+        <div class="step" data-step="3">
+          <span class="bullet">3</span
+          ><span>Fetching distances from Google Maps...</span>
+        </div>
+        <div class="step" data-step="4">
+          <span class="bullet">4</span><span>Generating CSV...</span>
+        </div>
+      </div>
+
+      <div id="error" class="error" hidden></div>
+
+      <div id="results" class="results" hidden>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:28px"></th>
+              <th>Sr</th>
+              <th>From</th>
+              <th>To</th>
+              <th class="num">Distance (km)</th>
+              <th class="num">Duration (mins)</th>
+              <th style="width:36px">Map</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+        <p id="fallbackLegend" class="fallback-legend" hidden></p>
+        <button id="downloadBtn" class="btn btn-secondary">Download CSV</button>
+      </div>
+    </main>
+
+    <script>
+      const WORKER_URL = "https://route-distance-worker.rrsonawne.workers.dev";
+
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileInput");
+      const previewWrap = document.getElementById("previewWrap");
+      const preview = document.getElementById("preview");
+      const extractBtn = document.getElementById("extractBtn");
+      const stepsEl = document.getElementById("steps");
+      const errorEl = document.getElementById("error");
+      const resultsEl = document.getElementById("results");
+      const resultsBody = document.getElementById("resultsBody");
+      const downloadBtn = document.getElementById("downloadBtn");
+
+      let selectedFile = null;
+      let lastRoutes = [];
+
+      ["dragenter", "dragover"].forEach((evt) =>
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add("dragover");
+        }),
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove("dragover");
+        }),
+      );
+      dropZone.addEventListener("drop", (e) => {
+        const file = e.dataTransfer?.files?.[0];
+        if (file) handleFile(file);
+      });
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (file) handleFile(file);
+      });
+
+      function handleFile(file) {
+        if (!file.type.startsWith("image/")) {
+          showError("Please select an image file.");
+          return;
+        }
+        clearError();
+        selectedFile = file;
+        const url = URL.createObjectURL(file);
+        preview.src = url;
+        previewWrap.hidden = false;
+        extractBtn.disabled = false;
+        resultsEl.hidden = true;
+        resultsBody.innerHTML = "";
+        resetSteps();
+      }
+
+      extractBtn.addEventListener("click", async () => {
+        if (!selectedFile) return;
+        clearError();
+        resultsEl.hidden = true;
+        stepsEl.hidden = false;
+        extractBtn.disabled = true;
+
+        try {
+          markStep(1, "active");
+          const base64 = await compressAndEncode(selectedFile);
+          markStep(1, "done");
+
+          markStep(2, "active");
+          if (WORKER_URL === "YOUR_WORKER_URL_HERE") {
+            throw new Error("Set WORKER_URL at the top of index.html first.");
+          }
+          const mode =
+            document.querySelector('input[name="mode"]:checked')?.value || "car";
+          const res = await fetch(WORKER_URL.replace(/\/$/, "") + "/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64, mimeType: "image/jpeg", mode }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            if (payload?.ocr_text) {
+              console.log("OCR raw text from worker:\n" + payload.ocr_text);
+            }
+            const suffix = payload?.ocr_text
+              ? "\n\nOCR text (open DevTools console for full output):\n" +
+                payload.ocr_text.slice(0, 400) +
+                (payload.ocr_text.length > 400 ? "…" : "")
+              : "";
+            throw new Error(
+              (payload?.error || `Worker returned HTTP ${res.status}`) + suffix,
+            );
+          }
+          markStep(2, "done");
+
+          markStep(3, "active");
+          const routes = payload?.routes || [];
+          if (routes.length === 0) throw new Error("No routes returned.");
+          markStep(3, "done");
+
+          markStep(4, "active");
+          lastRoutes = routes;
+          renderTable(routes);
+          markStep(4, "done");
+          resultsEl.hidden = false;
+        } catch (err) {
+          showError(err?.message || String(err));
+        } finally {
+          extractBtn.disabled = false;
+        }
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        const csv = toCsv(lastRoutes);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "routes.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      function renderTable(routes) {
+        resultsBody.innerHTML = "";
+        const selectedMode =
+          document.querySelector('input[name="mode"]:checked')?.value || "car";
+        let fallbackCount = 0;
+        for (const r of routes) {
+          const fellBack = r.mode_used && r.mode_used !== selectedMode;
+          if (fellBack) fallbackCount++;
+          const mark = fellBack ? '<span class="fallback-mark" title="Fell back to Car — requested mode had no route">*</span>' : "";
+          const alts = Array.isArray(r.alternatives) ? r.alternatives : [];
+          const hasAlts = alts.length > 0;
+
+          const mapUrl = buildGoogleMapsUrl(r.from, r.to, selectedMode);
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${hasAlts ? `<button class="toggle-btn" data-sr="${r.sr}" aria-expanded="false" title="Show all routes">+</button>` : ""}</td>
+            <td>${r.sr}</td>
+            <td>${escapeHtml(r.from)}</td>
+            <td>${escapeHtml(r.to)}</td>
+            <td class="num">${r.distance_km ?? '<span class="muted">—</span>'}${mark}</td>
+            <td class="num">${r.duration_mins ?? '<span class="muted">—</span>'}</td>
+            <td><a class="map-link" href="${mapUrl}" target="_blank" rel="noopener" title="Open in Google Maps">🗺️</a></td>
+          `;
+          resultsBody.appendChild(tr);
+
+          if (hasAlts) {
+            const altsTr = document.createElement("tr");
+            altsTr.className = "alts-row";
+            altsTr.dataset.sr = r.sr;
+            altsTr.hidden = true;
+            altsTr.innerHTML = `<td colspan="7">${renderAltsTable(alts)}</td>`;
+            resultsBody.appendChild(altsTr);
+          }
+        }
+        const legend = document.getElementById("fallbackLegend");
+        if (fallbackCount > 0) {
+          legend.textContent = `* ${fallbackCount} row${fallbackCount === 1 ? "" : "s"} fell back to Car because ${selectedMode === "bike" ? "Bike (bicycle)" : "Public transit"} had no available route.`;
+          legend.hidden = false;
+        } else {
+          legend.hidden = true;
+        }
+
+        resultsBody.querySelectorAll(".toggle-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const sr = btn.dataset.sr;
+            const altsRow = resultsBody.querySelector(`tr.alts-row[data-sr="${sr}"]`);
+            if (!altsRow) return;
+            const open = altsRow.hidden;
+            altsRow.hidden = !open;
+            btn.textContent = open ? "−" : "+";
+            btn.setAttribute("aria-expanded", String(open));
+          });
+        });
+      }
+
+      function renderAltsTable(alts) {
+        const rows = alts
+          .map((a, i) => {
+            const cls = a.is_picked ? "picked" : a.is_filtered ? "filtered" : "";
+            const badge = a.is_picked
+              ? '<span class="badge badge-picked">PICKED</span>'
+              : a.is_filtered
+              ? '<span class="badge badge-filtered" title="Highway / bypass route — Google Maps hides these for two-wheeler">FILTERED</span>'
+              : "";
+            return `
+              <tr class="${cls}">
+                <td>${i + 1}</td>
+                <td>${escapeHtml(a.description || "(no description)")}${badge}</td>
+                <td class="num">${a.distance_km ?? "—"}</td>
+                <td class="num">${a.duration_mins ?? "—"}</td>
+              </tr>
+            `;
+          })
+          .join("");
+        return `
+          <table class="alts-table">
+            <thead>
+              <tr>
+                <th style="width:30px">#</th>
+                <th>Route</th>
+                <th class="num" style="width:90px">Distance (km)</th>
+                <th class="num" style="width:90px">Duration (mins)</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      /**
+       * Build a Google Maps directions URL for a FROM → TO route.
+       * Travel mode codes in Google Maps URL: !3e0=driving, !3e9=two-wheeler, !3e3=transit, !3e2=walking
+       */
+      function buildGoogleMapsUrl(from, to, mode) {
+        const modeCode = { car: "0", bike: "9", public: "3", walk: "2" }[mode] || "0";
+        const origin = encodeURIComponent(from + ", Hyderabad");
+        const dest = encodeURIComponent(to + ", Hyderabad");
+        return `https://www.google.com/maps/dir/${origin}/${dest}/data=!4m2!4m1!3e${modeCode}`;
+      }
+
+      function toCsv(routes) {
+        const header = "Sr,From,To,Distance (km),Duration (mins)";
+        const rows = routes.map((r) =>
+          [
+            r.sr,
+            csvEscape(r.from),
+            csvEscape(r.to),
+            r.distance_km ?? "",
+            r.duration_mins ?? "",
+          ].join(","),
+        );
+        return [header, ...rows].join("\n");
+      }
+
+      function csvEscape(v) {
+        const s = String(v ?? "");
+        if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      }
+
+      function escapeHtml(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }[c]));
+      }
+
+      async function compressAndEncode(file) {
+        const MAX_BYTES = 1024 * 1024;
+        if (file.size <= MAX_BYTES && file.type === "image/jpeg") {
+          return await fileToBase64(file);
+        }
+        const img = await fileToImage(file);
+        let { width, height } = img;
+        const maxDim = 1600;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        let quality = 0.85;
+        let blob;
+        for (let i = 0; i < 6; i++) {
+          blob = await drawToBlob(img, width, height, quality);
+          if (blob.size <= MAX_BYTES) break;
+          quality -= 0.12;
+          if (quality < 0.4) {
+            width = Math.round(width * 0.85);
+            height = Math.round(height * 0.85);
+            quality = 0.7;
+          }
+        }
+        return await blobToBase64(blob);
+      }
+
+      function fileToImage(file) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
+        });
+      }
+
+      function drawToBlob(img, w, h, quality) {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        return new Promise((resolve) =>
+          canvas.toBlob((b) => resolve(b), "image/jpeg", quality),
+        );
+      }
+
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(stripDataUrl(reader.result));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+      const blobToBase64 = fileToBase64;
+
+      function stripDataUrl(dataUrl) {
+        const s = String(dataUrl);
+        const comma = s.indexOf(",");
+        return comma >= 0 ? s.slice(comma + 1) : s;
+      }
+
+      function resetSteps() {
+        stepsEl.hidden = true;
+        stepsEl.querySelectorAll(".step").forEach((el) => {
+          el.classList.remove("active", "done");
+        });
+      }
+      function markStep(n, state) {
+        const el = stepsEl.querySelector(`.step[data-step="${n}"]`);
+        if (!el) return;
+        el.classList.remove("active", "done");
+        el.classList.add(state);
+      }
+      function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+      }
+      function clearError() {
+        errorEl.textContent = "";
+        errorEl.hidden = true;
+      }
+    </script>
+  </body>
+</html>
