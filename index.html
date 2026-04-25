@@ -311,6 +311,19 @@
       .mode-picker.city-picker {
         margin-top: 12px;
       }
+      .city-search-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4b5563;
+        outline: none;
+      }
+      .city-search-input::placeholder {
+        color: #9ca3af;
+      }
     </style>
   </head>
   <body>
@@ -350,20 +363,21 @@
         </div>
 
         <div class="mode-picker city-picker">
-          <select id="cityInput" style="width: 100%; border: none; background: transparent; padding: 10px; font-size: 14px; font-weight: 500; color: #4b5563; cursor: pointer; outline: none;">
-            <option value="Hyderabad">Hyderabad</option>
-            <option value="Delhi">Delhi</option>
-            <option value="Delhi NCR">Delhi NCR</option>
-            <option value="Mumbai">Mumbai</option>
-            <option value="Bangalore">Bangalore</option>
-            <option value="Chennai">Chennai</option>
-            <option value="Kolkata">Kolkata</option>
-            <option value="Pune">Pune</option>
-          </select>
+          <input
+            id="cityInput"
+            class="city-search-input"
+            type="text"
+            list="citySuggestions"
+            placeholder="Search city (e.g. Hyderabad)"
+            value="Hyderabad"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <datalist id="citySuggestions"></datalist>
         </div>
 
       <button id="extractBtn" class="btn btn-primary" disabled>
-        Extract &amp; Get Distances
+        Extract Routes
       </button>
 
       <div id="steps" class="steps" hidden>
@@ -374,11 +388,7 @@
           <span class="bullet">2</span><span>Extracting routes via OCR...</span>
         </div>
         <div class="step" data-step="3">
-          <span class="bullet">3</span
-          ><span>Fetching distances from Google Maps...</span>
-        </div>
-        <div class="step" data-step="4">
-          <span class="bullet">4</span><span>Generating CSV...</span>
+          <span class="bullet">3</span><span>Generating CSV...</span>
         </div>
       </div>
 
@@ -388,18 +398,14 @@
         <table>
           <thead>
             <tr>
-              <th style="width:28px"></th>
               <th>Sr</th>
               <th>From</th>
               <th>To</th>
-              <th class="num">Distance (km)</th>
-              <th class="num">Duration (mins)</th>
               <th style="width:36px">Map</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
         </table>
-        <p id="fallbackLegend" class="fallback-legend" hidden></p>
         <button id="downloadBtn" class="btn btn-secondary">Download CSV</button>
       </div>
     </main>
@@ -418,9 +424,24 @@
       const resultsBody = document.getElementById("resultsBody");
       const downloadBtn = document.getElementById("downloadBtn");
       const cityInput = document.getElementById("cityInput");
+      const citySuggestions = document.getElementById("citySuggestions");
+
+      const FALLBACK_CITIES = [
+        "Hyderabad",
+        "Delhi",
+        "Delhi NCR",
+        "Mumbai",
+        "Bangalore",
+        "Chennai",
+        "Kolkata",
+        "Pune",
+      ];
 
       let selectedFile = null;
       let lastRoutes = [];
+      let indianCities = [];
+
+      initCityPicker();
 
       ["dragenter", "dragover"].forEach((evt) =>
         dropZone.addEventListener(evt, (e) => {
@@ -444,6 +465,65 @@
         const file = fileInput.files?.[0];
         if (file) handleFile(file);
       });
+      cityInput.addEventListener("input", () => {
+        updateCitySuggestions(cityInput.value);
+      });
+      cityInput.addEventListener("focus", () => {
+        updateCitySuggestions(cityInput.value);
+      });
+      cityInput.addEventListener("blur", () => {
+        cityInput.value = getSelectedCity();
+      });
+
+      async function initCityPicker() {
+        setCitySuggestions(FALLBACK_CITIES);
+        updateCitySuggestions(cityInput.value);
+
+        try {
+          const res = await fetch("./indian-cities.json");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const payload = await res.json();
+          if (!Array.isArray(payload)) throw new Error("Invalid city dataset format.");
+
+          indianCities = Array.from(
+            new Set(payload.map(normalizeCityName).filter(Boolean)),
+          ).sort((a, b) => a.localeCompare(b));
+
+          if (indianCities.length > 0) {
+            updateCitySuggestions(cityInput.value);
+          }
+        } catch (err) {
+          console.warn("Could not load offline city list:", err);
+        }
+      }
+
+      function normalizeCityName(value) {
+        return String(value ?? "").replace(/\s+/g, " ").trim();
+      }
+
+      function getSelectedCity() {
+        return normalizeCityName(cityInput.value) || "Hyderabad";
+      }
+
+      function updateCitySuggestions(query) {
+        const source = indianCities.length > 0 ? indianCities : FALLBACK_CITIES;
+        const normalizedQuery = normalizeCityName(query).toLowerCase();
+        const filtered = normalizedQuery
+          ? source.filter((city) => city.toLowerCase().includes(normalizedQuery))
+          : source;
+        setCitySuggestions(filtered.slice(0, 200));
+      }
+
+      function setCitySuggestions(cities) {
+        citySuggestions.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+        for (const city of cities) {
+          const option = document.createElement("option");
+          option.value = city;
+          fragment.appendChild(option);
+        }
+        citySuggestions.appendChild(fragment);
+      }
 
       function handleFile(file) {
         if (!file.type.startsWith("image/")) {
@@ -479,7 +559,7 @@
           }
           const mode =
             document.querySelector('input[name="mode"]:checked')?.value || "car";
-          const city = cityInput.value || "Hyderabad";
+          const city = getSelectedCity();
           const res = await fetch(WORKER_URL.replace(/\/$/, "") + "/extract", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -504,12 +584,9 @@
           markStep(3, "active");
           const routes = payload?.routes || [];
           if (routes.length === 0) throw new Error("No routes returned.");
-          markStep(3, "done");
-
-          markStep(4, "active");
           lastRoutes = routes;
           renderTable(routes);
-          markStep(4, "done");
+          markStep(3, "done");
           resultsEl.hidden = false;
         } catch (err) {
           showError(err?.message || String(err));
@@ -535,91 +612,22 @@
         resultsBody.innerHTML = "";
         const selectedMode =
           document.querySelector('input[name="mode"]:checked')?.value || "car";
-        const selectedCity = cityInput.value || "Hyderabad";
-        let fallbackCount = 0;
-        for (const r of routes) {
-          const fellBack = r.mode_used && r.mode_used !== selectedMode;
-          if (fellBack) fallbackCount++;
-          const mark = fellBack ? '<span class="fallback-mark" title="Fell back to Car — requested mode had no route">*</span>' : "";
-          const alts = Array.isArray(r.alternatives) ? r.alternatives : [];
-          const hasAlts = alts.length > 0;
+        const selectedCity = getSelectedCity();
 
+        for (const r of routes) {
           const mapUrl = buildGoogleMapsUrl(r.from, r.to, selectedMode, selectedCity);
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${hasAlts ? `<button class="toggle-btn" data-sr="${r.sr}" aria-expanded="false" title="Show all routes">+</button>` : ""}</td>
             <td>${r.sr}</td>
             <td>${escapeHtml(r.from)}</td>
             <td>${escapeHtml(r.to)}</td>
-            <td class="num">${r.distance_km ?? '<span class="muted">—</span>'}${mark}</td>
-            <td class="num">${r.duration_mins ?? '<span class="muted">—</span>'}</td>
             <td><a class="map-link" href="${mapUrl}" target="_blank" rel="noopener" title="Open in Google Maps">🗺️</a></td>
           `;
           resultsBody.appendChild(tr);
-
-          if (hasAlts) {
-            const altsTr = document.createElement("tr");
-            altsTr.className = "alts-row";
-            altsTr.dataset.sr = r.sr;
-            altsTr.hidden = true;
-            altsTr.innerHTML = `<td colspan="7">${renderAltsTable(alts)}</td>`;
-            resultsBody.appendChild(altsTr);
-          }
         }
-        const legend = document.getElementById("fallbackLegend");
-        if (fallbackCount > 0) {
-          legend.textContent = `* ${fallbackCount} row${fallbackCount === 1 ? "" : "s"} fell back to Car because ${selectedMode === "bike" ? "Bike (bicycle)" : "Public transit"} had no available route.`;
-          legend.hidden = false;
-        } else {
-          legend.hidden = true;
-        }
-
-        resultsBody.querySelectorAll(".toggle-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const sr = btn.dataset.sr;
-            const altsRow = resultsBody.querySelector(`tr.alts-row[data-sr="${sr}"]`);
-            if (!altsRow) return;
-            const open = altsRow.hidden;
-            altsRow.hidden = !open;
-            btn.textContent = open ? "−" : "+";
-            btn.setAttribute("aria-expanded", String(open));
-          });
-        });
       }
 
-      function renderAltsTable(alts) {
-        const rows = alts
-          .map((a, i) => {
-            const cls = a.is_picked ? "picked" : a.is_filtered ? "filtered" : "";
-            const badge = a.is_picked
-              ? '<span class="badge badge-picked">PICKED</span>'
-              : a.is_filtered
-              ? '<span class="badge badge-filtered" title="Highway / bypass route — Google Maps hides these for two-wheeler">FILTERED</span>'
-              : "";
-            return `
-              <tr class="${cls}">
-                <td>${i + 1}</td>
-                <td>${escapeHtml(a.description || "(no description)")}${badge}</td>
-                <td class="num">${a.distance_km ?? "—"}</td>
-                <td class="num">${a.duration_mins ?? "—"}</td>
-              </tr>
-            `;
-          })
-          .join("");
-        return `
-          <table class="alts-table">
-            <thead>
-              <tr>
-                <th style="width:30px">#</th>
-                <th>Route</th>
-                <th class="num" style="width:90px">Distance (km)</th>
-                <th class="num" style="width:90px">Duration (mins)</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
-      }
+
 
       /**
        * Build a Google Maps directions URL for a FROM → TO route.
@@ -633,14 +641,12 @@
       }
 
       function toCsv(routes) {
-        const header = "Sr,From,To,Distance (km),Duration (mins)";
+        const header = "Sr,From,To";
         const rows = routes.map((r) =>
           [
             r.sr,
             csvEscape(r.from),
             csvEscape(r.to),
-            r.distance_km ?? "",
-            r.duration_mins ?? "",
           ].join(","),
         );
         return [header, ...rows].join("\n");
